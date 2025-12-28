@@ -46,10 +46,17 @@ dependencies:
   timezone: ^0.9.2
   
   # Date/Time formatting
-  intl: ^0.19.0
+  intl: ^0.20.2
+  
+  # Localization
+  flutter_localizations:
+    sdk: flutter
   
   # Supabase
   supabase_flutter: ^2.5.6
+  
+  # Calendar
+  table_calendar: ^3.1.2
 
 dev_dependencies:
   flutter_test:

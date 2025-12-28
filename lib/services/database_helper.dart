@@ -1,58 +1,48 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/reminder.dart';
+import 'auth_service.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
-  static Database? _database;
+  final SupabaseClient _supabase = Supabase.instance.client;
+  final AuthService _authService = AuthService();
 
   DatabaseHelper._init();
 
-  Future<Database> get database async {
-    if (kIsWeb) {
-      throw UnsupportedError('Web platformında sqflite desteklenmiyor. Web desteği için shared_preferences kullanılıyor.');
-    }
-    if (_database != null) return _database!;
-    _database = await _initDB('reminders.db');
-    return _database!;
-  }
-
-  Future<Database> _initDB(String filePath) async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, filePath);
-
-    return await openDatabase(
-      path,
-      version: 1,
-      onCreate: _createDB,
-    );
-  }
-
-  Future<void> _createDB(Database db, int version) async {
-    await db.execute('''
-      CREATE TABLE reminders (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        description TEXT NOT NULL,
-        dateTime TEXT NOT NULL,
-        isRecurring INTEGER NOT NULL,
-        category TEXT NOT NULL,
-        isCompleted INTEGER NOT NULL
-      )
-    ''');
-  }
+  // Kullanıcı ID'sini al
+  String? get _userId => _authService.currentUser?.id;
 
   Future<int> createReminder(Reminder reminder) async {
     try {
-      if (kIsWeb) {
-        return await _createReminderWeb(reminder);
+      if (_userId == null) {
+        throw Exception('Kullanıcı giriş yapmamış');
       }
-      final db = await database;
-      final id = await db.insert('reminders', reminder.toMap());
-      print('Hatırlatıcı veritabanına eklendi, ID: $id');
+
+      final data = {
+        'user_id': _userId,
+        'title': reminder.title,
+        'description': reminder.description,
+        'date_time': reminder.dateTime.toIso8601String(),
+        'is_recurring': reminder.isRecurring,
+        'category': reminder.category,
+        'is_completed': reminder.isCompleted,
+        'is_all_day': reminder.isAllDay,
+        'recurrence_type': reminder.recurrenceType.name,
+        'weekly_days': reminder.weeklyDays.isEmpty ? null : reminder.weeklyDays.join(','),
+        'monthly_day': reminder.monthlyDay,
+        'notification_before_minutes': reminder.notificationBeforeMinutes,
+        'priority': reminder.priority.name,
+        'color_tag': reminder.colorTag,
+      };
+
+      final response = await _supabase
+          .from('reminders')
+          .insert(data)
+          .select('id')
+          .single();
+
+      final id = response['id'] as int;
+      print('Hatırlatıcı Supabase\'e eklendi, ID: $id');
       return id;
     } catch (e) {
       print('Hatırlatıcı oluşturulurken hata: $e');
@@ -60,235 +50,243 @@ class DatabaseHelper {
     }
   }
 
-  Future<int> _createReminderWeb(Reminder reminder) async {
-    final prefs = await SharedPreferences.getInstance();
-    final remindersJson = prefs.getStringList('reminders') ?? [];
-    
-    // Mevcut ID'lerden en büyüğünü bul
-    int maxId = 0;
-    for (final json in remindersJson) {
-      final map = jsonDecode(json) as Map<String, dynamic>;
-      final id = map['id'] as int? ?? 0;
-      if (id > maxId) maxId = id;
-    }
-    
-    final nextId = maxId + 1;
-    final reminderWithId = reminder.copyWith(id: nextId);
-    remindersJson.add(jsonEncode(reminderWithId.toMap()));
-    await prefs.setStringList('reminders', remindersJson);
-    print('Hatırlatıcı web\'e eklendi, ID: $nextId');
-    return nextId;
-  }
-
   Future<List<Reminder>> getAllReminders() async {
     try {
-      if (kIsWeb) {
-        return await _getAllRemindersWeb();
+      if (_userId == null) {
+        return [];
       }
-      final db = await database;
-      final result = await db.query('reminders', orderBy: 'dateTime ASC');
-      print('Veritabanından ${result.length} hatırlatıcı alındı');
-      return result.map((map) => Reminder.fromMap(map)).toList();
+
+      final response = await _supabase
+          .from('reminders')
+          .select()
+          .eq('user_id', _userId!)
+          .order('date_time', ascending: true);
+
+      final reminders = (response as List)
+          .map((map) => _reminderFromSupabaseMap(map as Map<String, dynamic>))
+          .toList();
+
+      print('Supabase\'den ${reminders.length} hatırlatıcı alındı');
+      return reminders;
     } catch (e) {
       print('Hatırlatıcılar alınırken hata: $e');
       rethrow;
     }
   }
 
-  Future<List<Reminder>> _getAllRemindersWeb() async {
-    final prefs = await SharedPreferences.getInstance();
-    final remindersJson = prefs.getStringList('reminders') ?? [];
-    final reminders = remindersJson
-        .map((json) => Reminder.fromMap(jsonDecode(json) as Map<String, dynamic>))
-        .toList();
-    reminders.sort((a, b) => a.dateTime.compareTo(b.dateTime));
-    print('Web\'den ${reminders.length} hatırlatıcı alındı');
-    return reminders;
-  }
-
   Future<List<Reminder>> getActiveReminders() async {
-    if (kIsWeb) {
-      final all = await _getAllRemindersWeb();
-      return all.where((r) => !r.isCompleted).toList();
+    if (_userId == null) {
+      return [];
     }
-    final db = await database;
-    final result = await db.query(
-      'reminders',
-      where: 'isCompleted = ?',
-      whereArgs: [0],
-      orderBy: 'dateTime ASC',
-    );
-    return result.map((map) => Reminder.fromMap(map)).toList();
+
+    final response = await _supabase
+        .from('reminders')
+        .select()
+        .eq('user_id', _userId!)
+        .eq('is_completed', false)
+        .order('date_time', ascending: true);
+
+    return (response as List)
+        .map((map) => _reminderFromSupabaseMap(map as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<Reminder>> getCompletedReminders() async {
-    if (kIsWeb) {
-      final all = await _getAllRemindersWeb();
-      final completed = all.where((r) => r.isCompleted).toList();
-      completed.sort((a, b) => b.dateTime.compareTo(a.dateTime));
-      return completed;
+    if (_userId == null) {
+      return [];
     }
-    final db = await database;
-    final result = await db.query(
-      'reminders',
-      where: 'isCompleted = ?',
-      whereArgs: [1],
-      orderBy: 'dateTime DESC',
-    );
-    return result.map((map) => Reminder.fromMap(map)).toList();
+
+    final response = await _supabase
+        .from('reminders')
+        .select()
+        .eq('user_id', _userId!)
+        .eq('is_completed', true)
+        .order('date_time', ascending: false);
+
+    return (response as List)
+        .map((map) => _reminderFromSupabaseMap(map as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<Reminder>> searchReminders(String query) async {
-    if (kIsWeb) {
-      final all = await _getAllRemindersWeb();
-      final lowerQuery = query.toLowerCase();
-      return all.where((r) {
-        return r.title.toLowerCase().contains(lowerQuery) ||
-            r.description.toLowerCase().contains(lowerQuery) ||
-            r.category.toLowerCase().contains(lowerQuery);
-      }).toList();
+    if (_userId == null) {
+      return [];
     }
-    final db = await database;
-    final result = await db.query(
-      'reminders',
-      where: 'title LIKE ? OR description LIKE ? OR category LIKE ?',
-      whereArgs: ['%$query%', '%$query%', '%$query%'],
-      orderBy: 'dateTime ASC',
-    );
-    return result.map((map) => Reminder.fromMap(map)).toList();
+
+    // Türkçe karakter desteği için ilike kullanıyoruz (PostgreSQL case-insensitive)
+    // Supabase ilike zaten Türkçe karakterleri destekler
+    final response = await _supabase
+        .from('reminders')
+        .select()
+        .eq('user_id', _userId!)
+        .or('title.ilike.%$query%,description.ilike.%$query%,category.ilike.%$query%')
+        .order('date_time', ascending: true);
+
+    return (response as List)
+        .map((map) => _reminderFromSupabaseMap(map as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<Reminder>> getRemindersByCategory(String category) async {
-    if (kIsWeb) {
-      final all = await _getAllRemindersWeb();
-      return all.where((r) => r.category == category).toList();
+    if (_userId == null) {
+      return [];
     }
-    final db = await database;
-    final result = await db.query(
-      'reminders',
-      where: 'category = ?',
-      whereArgs: [category],
-      orderBy: 'dateTime ASC',
-    );
-    return result.map((map) => Reminder.fromMap(map)).toList();
+
+    final response = await _supabase
+        .from('reminders')
+        .select()
+        .eq('user_id', _userId!)
+        .eq('category', category)
+        .order('date_time', ascending: true);
+
+    return (response as List)
+        .map((map) => _reminderFromSupabaseMap(map as Map<String, dynamic>))
+        .toList();
   }
 
   Future<List<Reminder>> getRemindersByDate(DateTime date) async {
-    if (kIsWeb) {
-      final all = await _getAllRemindersWeb();
-      final startOfDay = DateTime(date.year, date.month, date.day);
-      final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
-      return all.where((r) {
-        return r.dateTime.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
-            r.dateTime.isBefore(endOfDay.add(const Duration(seconds: 1)));
-      }).toList();
+    if (_userId == null) {
+      return [];
     }
-    final db = await database;
+
     final startOfDay = DateTime(date.year, date.month, date.day);
     final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
-    
-    final result = await db.query(
-      'reminders',
-      where: 'dateTime >= ? AND dateTime <= ?',
-      whereArgs: [
-        startOfDay.toIso8601String(),
-        endOfDay.toIso8601String(),
-      ],
-      orderBy: 'dateTime ASC',
-    );
-    return result.map((map) => Reminder.fromMap(map)).toList();
+
+    final response = await _supabase
+        .from('reminders')
+        .select()
+        .eq('user_id', _userId!)
+        .gte('date_time', startOfDay.toIso8601String())
+        .lte('date_time', endOfDay.toIso8601String())
+        .order('date_time', ascending: true);
+
+    return (response as List)
+        .map((map) => _reminderFromSupabaseMap(map as Map<String, dynamic>))
+        .toList();
   }
 
   Future<Reminder?> getReminder(int id) async {
-    if (kIsWeb) {
-      final all = await _getAllRemindersWeb();
-      try {
-        return all.firstWhere((r) => r.id == id);
-      } catch (e) {
-        return null;
-      }
+    if (_userId == null) {
+      return null;
     }
-    final db = await database;
-    final result = await db.query(
-      'reminders',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
 
-    if (result.isNotEmpty) {
-      return Reminder.fromMap(result.first);
+    try {
+      final response = await _supabase
+          .from('reminders')
+          .select()
+          .eq('id', id)
+          .eq('user_id', _userId!)
+          .single();
+
+      return _reminderFromSupabaseMap(response as Map<String, dynamic>);
+    } catch (e) {
+      print('Hatırlatıcı bulunamadı: $e');
+      return null;
     }
-    return null;
   }
 
   Future<int> updateReminder(Reminder reminder) async {
-    if (kIsWeb) {
-      return await _updateReminderWeb(reminder);
+    if (_userId == null || reminder.id == null) {
+      return 0;
     }
-    final db = await database;
-    return await db.update(
-      'reminders',
-      reminder.toMap(),
-      where: 'id = ?',
-      whereArgs: [reminder.id],
-    );
-  }
 
-  Future<int> _updateReminderWeb(Reminder reminder) async {
-    final prefs = await SharedPreferences.getInstance();
-    final remindersJson = prefs.getStringList('reminders') ?? [];
-    final index = remindersJson.indexWhere((json) {
-      final map = jsonDecode(json) as Map<String, dynamic>;
-      return map['id'] == reminder.id;
-    });
-    if (index != -1) {
-      remindersJson[index] = jsonEncode(reminder.toMap());
-      await prefs.setStringList('reminders', remindersJson);
+    try {
+      final data = {
+        'title': reminder.title,
+        'description': reminder.description,
+        'date_time': reminder.dateTime.toIso8601String(),
+        'is_recurring': reminder.isRecurring,
+        'category': reminder.category,
+        'is_completed': reminder.isCompleted,
+        'is_all_day': reminder.isAllDay,
+        'recurrence_type': reminder.recurrenceType.name,
+        'weekly_days': reminder.weeklyDays.isEmpty ? null : reminder.weeklyDays.join(','),
+        'monthly_day': reminder.monthlyDay,
+        'notification_before_minutes': reminder.notificationBeforeMinutes,
+        'priority': reminder.priority.name,
+        'color_tag': reminder.colorTag,
+      };
+
+      await _supabase
+          .from('reminders')
+          .update(data)
+          .eq('id', reminder.id!)
+          .eq('user_id', _userId!);
+
       return 1;
+    } catch (e) {
+      print('Hatırlatıcı güncellenirken hata: $e');
+      return 0;
     }
-    return 0;
   }
 
   Future<int> deleteReminder(int id) async {
-    if (kIsWeb) {
-      return await _deleteReminderWeb(id);
+    if (_userId == null) {
+      return 0;
     }
-    final db = await database;
-    return await db.delete(
-      'reminders',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
 
-  Future<int> _deleteReminderWeb(int id) async {
-    final prefs = await SharedPreferences.getInstance();
-    final remindersJson = prefs.getStringList('reminders') ?? [];
-    remindersJson.removeWhere((json) {
-      final map = jsonDecode(json) as Map<String, dynamic>;
-      return map['id'] == id;
-    });
-    await prefs.setStringList('reminders', remindersJson);
-    return 1;
+    try {
+      await _supabase
+          .from('reminders')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', _userId!);
+
+      return 1;
+    } catch (e) {
+      print('Hatırlatıcı silinirken hata: $e');
+      return 0;
+    }
   }
 
   Future<List<String>> getAllCategories() async {
-    if (kIsWeb) {
-      final reminders = await _getAllRemindersWeb();
-      final categories = reminders.map((r) => r.category).toSet().toList();
+    if (_userId == null) {
+      return [];
+    }
+
+    try {
+      final response = await _supabase
+          .from('reminders')
+          .select('category')
+          .eq('user_id', _userId!);
+
+      final categories = (response as List)
+          .map((map) => (map as Map<String, dynamic>)['category'] as String)
+          .toSet()
+          .toList();
+      
       categories.sort();
       return categories;
+    } catch (e) {
+      print('Kategoriler alınırken hata: $e');
+      return [];
     }
-    final db = await database;
-    final result = await db.rawQuery(
-      'SELECT DISTINCT category FROM reminders ORDER BY category',
-    );
-    return result.map((map) => map['category'] as String).toList();
   }
 
-  Future<void> close() async {
-    final db = await database;
-    await db.close();
+  // Supabase map'ini Reminder'a çevir
+  Reminder _reminderFromSupabaseMap(Map<String, dynamic> map) {
+    return Reminder(
+      id: map['id'] as int?,
+      title: map['title'] as String,
+      description: map['description'] as String? ?? '',
+      dateTime: DateTime.parse(map['date_time'] as String),
+      isRecurring: map['is_recurring'] as bool? ?? false,
+      category: map['category'] as String? ?? 'Genel',
+      isCompleted: map['is_completed'] as bool? ?? false,
+      isAllDay: map['is_all_day'] as bool? ?? false,
+      recurrenceType: RecurrenceType.values.firstWhere(
+        (e) => e.name == (map['recurrence_type'] as String? ?? 'none'),
+        orElse: () => RecurrenceType.none,
+      ),
+      weeklyDays: (map['weekly_days'] as String? ?? '').split(',').where((e) => e.isNotEmpty).map((e) => int.parse(e)).toList(),
+      monthlyDay: map['monthly_day'] as int?,
+      notificationBeforeMinutes: map['notification_before_minutes'] as int? ?? 0,
+      priority: Priority.values.firstWhere(
+        (e) => e.name == (map['priority'] as String? ?? 'normal'),
+        orElse: () => Priority.normal,
+      ),
+      colorTag: map['color_tag'] as int? ?? 0,
+    );
   }
 }
 

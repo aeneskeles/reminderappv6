@@ -140,6 +140,29 @@ class AuthService {
     }
   }
 
+  // Şifre sıfırlama e-postası gönder
+  Future<void> resetPassword(String email) async {
+    try {
+      await _supabase.auth.resetPasswordForEmail(
+        email,
+        redirectTo: 'io.supabase.reminderappv6://reset-password/',
+      );
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  // Yeni şifre ile şifreyi güncelle
+  Future<void> updatePassword(String newPassword) async {
+    try {
+      await _supabase.auth.updateUser(
+        UserAttributes(password: newPassword),
+      );
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   // Auth state değişikliklerini dinle
   Stream<AuthState> get authStateChanges => _supabase.auth.onAuthStateChange;
 }

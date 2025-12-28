@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import '../services/auth_service.dart';
+import '../services/theme_service.dart';
 import 'register_screen.dart';
 import 'home_screen.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,8 +18,10 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _authService = AuthService();
-  bool _isLoading = false;
+  bool _isLoadingEmail = false;
+  bool _isLoadingGoogle = false;
   bool _obscurePassword = true;
+  bool _rememberMe = false;
 
   @override
   void dispose() {
@@ -28,7 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
-        _isLoading = true;
+        _isLoadingEmail = true;
       });
 
       try {
@@ -66,7 +71,7 @@ class _LoginScreenState extends State<LoginScreen> {
       } finally {
         if (mounted) {
           setState(() {
-            _isLoading = false;
+            _isLoadingEmail = false;
           });
         }
       }
@@ -75,7 +80,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _loginWithGoogle() async {
     setState(() {
-      _isLoading = true;
+      _isLoadingGoogle = true;
     });
 
     try {
@@ -94,7 +99,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) {
         setState(() {
-          _isLoading = false;
+          _isLoadingGoogle = false;
         });
       }
     }
@@ -102,174 +107,455 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+    return FutureBuilder<Color>(
+      future: ThemeService.instance.getThemeColor(),
+      builder: (context, snapshot) {
+        final themeColor = snapshot.data ?? ThemeService.instance.defaultColor;
+        final gradientColors = ThemeService.instance.getGradientColors(themeColor);
+        
+        return Scaffold(
+          body: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: gradientColors,
+              ),
+            ),
+            child: SafeArea(
+              child: Stack(
                 children: [
-                  // Logo veya başlık
-                  Icon(
-                    Icons.notifications_active,
-                    size: 80,
-                    color: Theme.of(context).colorScheme.primary,
+              // Blurred background shapes
+              Positioned(
+                top: -100,
+                left: -100,
+                child: Container(
+                  width: 300,
+                  height: 300,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.1),
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Hatırlatıcı Uygulaması',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                ),
+              ),
+              Positioned(
+                bottom: -150,
+                right: -100,
+                child: Container(
+                  width: 400,
+                  height: 400,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.1),
                   ),
-                  const SizedBox(height: 48),
-                  
-                  // Email alanı
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'E-posta',
-                      hintText: 'ornek@email.com',
-                      prefixIcon: Icon(Icons.email),
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'E-posta adresi gereklidir';
-                      }
-                      if (!value.contains('@')) {
-                        return 'Geçerli bir e-posta adresi girin';
-                      }
-                      return null;
-                    },
+                ),
+              ),
+              Positioned(
+                top: 200,
+                right: -50,
+                child: Container(
+                  width: 200,
+                  height: 200,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withOpacity(0.1),
                   ),
-                  const SizedBox(height: 16),
-                  
-                  // Şifre alanı
-                  TextFormField(
-                    controller: _passwordController,
-                    obscureText: _obscurePassword,
-                    decoration: InputDecoration(
-                      labelText: 'Şifre',
-                      hintText: 'Şifrenizi girin',
-                      prefixIcon: const Icon(Icons.lock),
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _obscurePassword
-                              ? Icons.visibility
-                              : Icons.visibility_off,
-                        ),
-                        onPressed: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
-                        },
-                      ),
-                      border: const OutlineInputBorder(),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Şifre gereklidir';
-                      }
-                      if (value.length < 6) {
-                        return 'Şifre en az 6 karakter olmalıdır';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 24),
-                  
-                  // Giriş butonu
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : _login,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              // Main content
+              Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 60),
+                        // Glassmorphism card
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(30),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(32.0),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(30),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.3),
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  // Success icon
+                                  Container(
+                                    width: 60,
+                                    height: 60,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: themeColor,
+                                    ),
+                                    child: const Icon(
+                                      Icons.check,
+                                      color: Colors.white,
+                                      size: 30,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  // Welcome message
+                                  Text(
+                                    'Welcome back!',
+                                    style: TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Plan your day.',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.white.withOpacity(0.8),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 32),
+                                  // Email alanı
+                                  TextFormField(
+                                    controller: _emailController,
+                                    keyboardType: TextInputType.emailAddress,
+                                    style: const TextStyle(color: Colors.white),
+                                    decoration: InputDecoration(
+                                      labelText: 'Email',
+                                      labelStyle: TextStyle(
+                                        color: Colors.white.withOpacity(0.7),
+                                      ),
+                                      hintText: 'Email',
+                                      hintStyle: TextStyle(
+                                        color: Colors.white.withOpacity(0.5),
+                                      ),
+                                      prefixIcon: Icon(
+                                        Icons.email,
+                                        color: Colors.white.withOpacity(0.7),
+                                      ),
+                                      filled: true,
+                                      fillColor: Colors.white.withOpacity(0.3),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(15),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(15),
+                                        borderSide: BorderSide(
+                                          color: Colors.white.withOpacity(0.3),
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(15),
+                                        borderSide: const BorderSide(
+                                          color: Colors.white,
+                                          width: 2,
+                                        ),
+                                      ),
+                                    ),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'E-posta adresi gereklidir';
+                                      }
+                                      if (!value.contains('@')) {
+                                        return 'Geçerli bir e-posta adresi girin';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+                                  
+                                  // Şifre alanı
+                                  TextFormField(
+                                    controller: _passwordController,
+                                    obscureText: _obscurePassword,
+                                    style: const TextStyle(color: Colors.white),
+                                    decoration: InputDecoration(
+                                      labelText: 'Password',
+                                      labelStyle: TextStyle(
+                                        color: Colors.white.withOpacity(0.7),
+                                      ),
+                                      hintText: 'Password',
+                                      hintStyle: TextStyle(
+                                        color: Colors.white.withOpacity(0.5),
+                                      ),
+                                      prefixIcon: Icon(
+                                        Icons.lock,
+                                        color: Colors.white.withOpacity(0.7),
+                                      ),
+                                      suffixIcon: IconButton(
+                                        icon: Icon(
+                                          _obscurePassword
+                                              ? Icons.visibility
+                                              : Icons.visibility_off,
+                                          color: Colors.white.withOpacity(0.7),
+                                        ),
+                                        onPressed: () {
+                                          setState(() {
+                                            _obscurePassword = !_obscurePassword;
+                                          });
+                                        },
+                                      ),
+                                      filled: true,
+                                      fillColor: Colors.white.withOpacity(0.3),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(15),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(15),
+                                        borderSide: BorderSide(
+                                          color: Colors.white.withOpacity(0.3),
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(15),
+                                        borderSide: const BorderSide(
+                                          color: Colors.white,
+                                          width: 2,
+                                        ),
+                                      ),
+                                    ),
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Şifre gereklidir';
+                                      }
+                                      if (value.length < 6) {
+                                        return 'Şifre en az 6 karakter olmalıdır';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+                                  
+                                  // Giriş Yap butonu
+                                  Container(
+                                    width: double.infinity,
+                                    height: 56,
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          gradientColors[0],
+                                          gradientColors[1],
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(15),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: gradientColors[0].withOpacity(0.4),
+                                          blurRadius: 15,
+                                          offset: const Offset(0, 5),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        onTap: (_isLoadingEmail || _isLoadingGoogle) ? null : _login,
+                                        borderRadius: BorderRadius.circular(15),
+                                        child: Center(
+                                          child: _isLoadingEmail
+                                              ? const SizedBox(
+                                                  height: 20,
+                                                  width: 20,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                                  ),
+                                                )
+                                              : const Text(
+                                                  'Log In',
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  
+                                  // Remember me ve Şifremi Unuttum
+                                  Row(
+                                    children: [
+                                      // Remember me
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            'Remember me',
+                                            style: TextStyle(
+                                              color: Colors.white.withOpacity(0.8),
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Transform.scale(
+                                            scale: 0.8,
+                                            child: Switch(
+                                              value: _rememberMe,
+                                              onChanged: (value) {
+                                                setState(() {
+                                                  _rememberMe = value;
+                                                });
+                                              },
+                                              activeColor: themeColor,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const Spacer(),
+                                      // Şifremi unuttum linki
+                                      TextButton(
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => const ForgotPasswordScreen(),
+                                            ),
+                                          );
+                                        },
+                                        child: Text(
+                                          'Şifremi Unuttum',
+                                          style: TextStyle(
+                                            color: Colors.white.withOpacity(0.7),
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 24),
+                                  
+                                  // Google ile giriş butonu
+                                  Container(
+                                    width: double.infinity,
+                                    height: 56,
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          gradientColors[0],
+                                          gradientColors[1],
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(15),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: gradientColors[0].withOpacity(0.4),
+                                          blurRadius: 15,
+                                          offset: const Offset(0, 5),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        onTap: (_isLoadingEmail || _isLoadingGoogle) ? null : _loginWithGoogle,
+                                        borderRadius: BorderRadius.circular(15),
+                                        child: Center(
+                                          child: _isLoadingGoogle
+                                              ? const SizedBox(
+                                                  height: 20,
+                                                  width: 20,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                                  ),
+                                                )
+                                              : const Text(
+                                                  'Continue with Google',
+                                                  style: TextStyle(
+                                                    color: Colors.white,
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  
+                                  // Kayıt ol linki
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        'Hesabınız yok mu? ',
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.7),
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => const RegisterScreen(),
+                                            ),
+                                          );
+                                        },
+                                        child: const Text(
+                                          'Kayıt Ol',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
-                          )
-                        : const Text(
-                            'Giriş Yap',
-                            style: TextStyle(fontSize: 16),
                           ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Veya ayırıcı
-                  Row(
-                    children: [
-                      Expanded(child: Divider()),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text('veya', style: TextStyle(color: Colors.grey)),
-                      ),
-                      Expanded(child: Divider()),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Google ile giriş butonu
-                  OutlinedButton.icon(
-                    onPressed: _isLoading ? null : _loginWithGoogle,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      side: BorderSide(color: Colors.grey.shade300),
-                    ),
-                    icon: const Icon(
-                      Icons.g_mobiledata,
-                      size: 24,
-                      color: Colors.blue,
-                    ),
-                    label: const Text(
-                      'Google ile Giriş Yap',
-                      style: TextStyle(fontSize: 16),
+                        ),
+                        const SizedBox(height: 40),
+                        
+                        // Bottom text
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                          child: Column(
+                            children: [
+                              Text(
+                                'Time to focus, mind as ease.',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.8),
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '5 tasks waiting for you today',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.6),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  
-                  // Kayıt ol linki
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text('Hesabınız yok mu? '),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const RegisterScreen(),
-                            ),
-                          );
-                        },
-                        child: const Text('Kayıt Ol'),
-                      ),
-                    ],
-                  ),
+                ),
+              ),
                 ],
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

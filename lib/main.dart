@@ -1,11 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/supabase_config.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/reset_password_screen.dart';
 import 'services/notification_service.dart';
 import 'services/auth_service.dart';
+import 'services/database_helper.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+// Bildirim yanıtlarını işle
+void _handleNotificationResponse(NotificationResponse response) {
+  if (response.actionId != null) {
+    // Bildirim aksiyon butonuna tıklandı
+    final reminderId = int.tryParse(response.payload ?? '');
+    if (reminderId != null) {
+      NotificationService.instance.handleNotificationAction(
+        response.actionId!,
+        reminderId,
+      );
+    }
+  } else if (response.payload != null) {
+    // Bildirime tıklandı (uygulama açılacak)
+    print('Bildirime tıklandı: ${response.payload}');
+  }
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,8 +37,8 @@ void main() async {
     anonKey: SupabaseConfig.supabaseAnonKey,
   );
   
-  // Bildirim servisini başlat
-  await NotificationService.instance.initialize();
+  // Bildirim servisini başlat (bildirim aksiyonlarını handle et)
+  await NotificationService.instance.initialize(_handleNotificationResponse);
   
   runApp(const MyApp());
 }
@@ -38,6 +59,7 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     _checkAuth();
+    _handleDeepLinks();
     _authService.authStateChanges.listen((event) async {
       final isAuth = _authService.isAuthenticated;
       setState(() {
@@ -51,6 +73,27 @@ class _MyAppState extends State<MyApp> {
         if (user.appMetadata['provider'] == 'google') {
           await _handleGoogleSignInProfile(user);
         }
+      }
+    });
+  }
+
+  void _handleDeepLinks() {
+    // Supabase deep link handling
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      final event = data.event;
+      final session = data.session;
+      
+      // Şifre sıfırlama akışı kontrolü
+      if (event == AuthChangeEvent.passwordRecovery && session != null) {
+        // Şifre sıfırlama linkine tıklandı, ResetPasswordScreen'e yönlendir
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const ResetPasswordScreen()),
+              (route) => false,
+            );
+          }
+        });
       }
     });
   }
@@ -106,6 +149,16 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       title: 'Hatırlatıcı Uygulaması',
       debugShowCheckedModeBanner: false,
+      locale: const Locale('tr', 'TR'),
+      supportedLocales: const [
+        Locale('tr', 'TR'),
+        Locale('en', 'US'),
+      ],
+      localizationsDelegates: [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.blue,
