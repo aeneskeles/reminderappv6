@@ -6,9 +6,13 @@ import 'config/supabase_config.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/reset_password_screen.dart';
+import 'screens/onboarding_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'services/notification_service.dart';
 import 'services/auth_service.dart';
 import 'services/database_helper.dart';
+import 'services/sync_service.dart';
+import 'services/settings_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 // Bildirim yanıtlarını işle
@@ -40,6 +44,9 @@ void main() async {
   // Bildirim servisini başlat (bildirim aksiyonlarını handle et)
   await NotificationService.instance.initialize(_handleNotificationResponse);
   
+  // Senkronizasyon servisini başlat
+  await SyncService.instance.initialize();
+  
   runApp(const MyApp());
 }
 
@@ -52,12 +59,17 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final _authService = AuthService();
+  final _settingsService = SettingsService.instance;
   bool _isAuthenticated = false;
   bool _isLoading = true;
+  bool _showOnboarding = false;
+  ThemeMode _themeMode = ThemeMode.system;
 
   @override
   void initState() {
     super.initState();
+    _loadThemeMode();
+    _checkOnboarding();
     _checkAuth();
     _handleDeepLinks();
     _authService.authStateChanges.listen((event) async {
@@ -125,6 +137,32 @@ class _MyAppState extends State<MyApp> {
     }
   }
 
+  Future<void> _loadThemeMode() async {
+    final themeModeString = await _settingsService.getThemeMode();
+    setState(() {
+      switch (themeModeString) {
+        case 'light':
+          _themeMode = ThemeMode.light;
+          break;
+        case 'dark':
+          _themeMode = ThemeMode.dark;
+          break;
+        case 'system':
+        default:
+          _themeMode = ThemeMode.system;
+          break;
+      }
+    });
+  }
+
+  Future<void> _checkOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    final completed = prefs.getBool('onboarding_completed') ?? false;
+    setState(() {
+      _showOnboarding = !completed;
+    });
+  }
+
   Future<void> _checkAuth() async {
     setState(() {
       _isAuthenticated = _authService.isAuthenticated;
@@ -159,6 +197,7 @@ class _MyAppState extends State<MyApp> {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      themeMode: _themeMode,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.blue,
@@ -169,7 +208,19 @@ class _MyAppState extends State<MyApp> {
           systemOverlayStyle: SystemUiOverlayStyle.light,
         ),
       ),
-      home: _isAuthenticated ? const HomeScreen() : const LoginScreen(),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+        appBarTheme: const AppBarTheme(
+          systemOverlayStyle: SystemUiOverlayStyle.light,
+        ),
+      ),
+      home: _showOnboarding 
+          ? const OnboardingScreen()
+          : (_isAuthenticated ? const HomeScreen() : const LoginScreen()),
     );
   }
 }

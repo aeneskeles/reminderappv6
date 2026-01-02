@@ -1,10 +1,11 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/reminder.dart';
 import 'auth_service.dart';
+import 'sync_service.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
-  final SupabaseClient _supabase = Supabase.instance.client;
+  final SyncService _syncService = SyncService.instance;
   final AuthService _authService = AuthService();
 
   DatabaseHelper._init();
@@ -12,207 +13,124 @@ class DatabaseHelper {
   // Kullanıcı ID'sini al
   String? get _userId => _authService.currentUser?.id;
 
+  // Create reminder (using sync service)
   Future<int> createReminder(Reminder reminder) async {
     try {
       if (_userId == null) {
         throw Exception('Kullanıcı giriş yapmamış');
       }
 
-      final data = {
-        'user_id': _userId,
-        'title': reminder.title,
-        'description': reminder.description,
-        'date_time': reminder.dateTime.toIso8601String(),
-        'is_recurring': reminder.isRecurring,
-        'category': reminder.category,
-        'is_completed': reminder.isCompleted,
-        'is_all_day': reminder.isAllDay,
-        'recurrence_type': reminder.recurrenceType.name,
-        'weekly_days': reminder.weeklyDays.isEmpty ? null : reminder.weeklyDays.join(','),
-        'monthly_day': reminder.monthlyDay,
-        'notification_before_minutes': reminder.notificationBeforeMinutes,
-        'priority': reminder.priority.name,
-        'color_tag': reminder.colorTag,
-      };
-
-      final response = await _supabase
-          .from('reminders')
-          .insert(data)
-          .select('id')
-          .single();
-
-      final id = response['id'] as int;
-      print('Hatırlatıcı Supabase\'e eklendi, ID: $id');
-      return id;
+      return await _syncService.createReminder(reminder);
     } catch (e) {
       print('Hatırlatıcı oluşturulurken hata: $e');
       rethrow;
     }
   }
 
+  // Get all reminders (using sync service - from local db)
   Future<List<Reminder>> getAllReminders() async {
     try {
       if (_userId == null) {
         return [];
       }
 
-      final response = await _supabase
-          .from('reminders')
-          .select()
-          .eq('user_id', _userId!)
-          .order('date_time', ascending: true);
-
-      final reminders = (response as List)
-          .map((map) => _reminderFromSupabaseMap(map as Map<String, dynamic>))
-          .toList();
-
-      print('Supabase\'den ${reminders.length} hatırlatıcı alındı');
-      return reminders;
+      return await _syncService.getAllReminders();
     } catch (e) {
       print('Hatırlatıcılar alınırken hata: $e');
-      rethrow;
+      return [];
     }
   }
 
+  // Get active reminders
   Future<List<Reminder>> getActiveReminders() async {
-    if (_userId == null) {
-      return [];
-    }
-
-    final response = await _supabase
-        .from('reminders')
-        .select()
-        .eq('user_id', _userId!)
-        .eq('is_completed', false)
-        .order('date_time', ascending: true);
-
-    return (response as List)
-        .map((map) => _reminderFromSupabaseMap(map as Map<String, dynamic>))
-        .toList();
-  }
-
-  Future<List<Reminder>> getCompletedReminders() async {
-    if (_userId == null) {
-      return [];
-    }
-
-    final response = await _supabase
-        .from('reminders')
-        .select()
-        .eq('user_id', _userId!)
-        .eq('is_completed', true)
-        .order('date_time', ascending: false);
-
-    return (response as List)
-        .map((map) => _reminderFromSupabaseMap(map as Map<String, dynamic>))
-        .toList();
-  }
-
-  Future<List<Reminder>> searchReminders(String query) async {
-    if (_userId == null) {
-      return [];
-    }
-
-    // Türkçe karakter desteği için ilike kullanıyoruz (PostgreSQL case-insensitive)
-    // Supabase ilike zaten Türkçe karakterleri destekler
-    final response = await _supabase
-        .from('reminders')
-        .select()
-        .eq('user_id', _userId!)
-        .or('title.ilike.%$query%,description.ilike.%$query%,category.ilike.%$query%')
-        .order('date_time', ascending: true);
-
-    return (response as List)
-        .map((map) => _reminderFromSupabaseMap(map as Map<String, dynamic>))
-        .toList();
-  }
-
-  Future<List<Reminder>> getRemindersByCategory(String category) async {
-    if (_userId == null) {
-      return [];
-    }
-
-    final response = await _supabase
-        .from('reminders')
-        .select()
-        .eq('user_id', _userId!)
-        .eq('category', category)
-        .order('date_time', ascending: true);
-
-    return (response as List)
-        .map((map) => _reminderFromSupabaseMap(map as Map<String, dynamic>))
-        .toList();
-  }
-
-  Future<List<Reminder>> getRemindersByDate(DateTime date) async {
-    if (_userId == null) {
-      return [];
-    }
-
-    final startOfDay = DateTime(date.year, date.month, date.day);
-    final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
-
-    final response = await _supabase
-        .from('reminders')
-        .select()
-        .eq('user_id', _userId!)
-        .gte('date_time', startOfDay.toIso8601String())
-        .lte('date_time', endOfDay.toIso8601String())
-        .order('date_time', ascending: true);
-
-    return (response as List)
-        .map((map) => _reminderFromSupabaseMap(map as Map<String, dynamic>))
-        .toList();
-  }
-
-  Future<Reminder?> getReminder(int id) async {
-    if (_userId == null) {
-      return null;
-    }
-
     try {
-      final response = await _supabase
-          .from('reminders')
-          .select()
-          .eq('id', id)
-          .eq('user_id', _userId!)
-          .single();
+      final allReminders = await getAllReminders();
+      return allReminders.where((r) => !r.isCompleted).toList();
+    } catch (e) {
+      print('Aktif hatırlatıcılar alınırken hata: $e');
+      return [];
+    }
+  }
 
-      return _reminderFromSupabaseMap(response as Map<String, dynamic>);
+  // Get completed reminders
+  Future<List<Reminder>> getCompletedReminders() async {
+    try {
+      final allReminders = await getAllReminders();
+      return allReminders.where((r) => r.isCompleted).toList()
+        ..sort((a, b) => b.dateTime.compareTo(a.dateTime));
+    } catch (e) {
+      print('Tamamlanan hatırlatıcılar alınırken hata: $e');
+      return [];
+    }
+  }
+
+  // Search reminders
+  Future<List<Reminder>> searchReminders(String query) async {
+    try {
+      final allReminders = await getAllReminders();
+      final lowerQuery = query.toLowerCase();
+      
+      return allReminders.where((r) {
+        return r.title.toLowerCase().contains(lowerQuery) ||
+            r.description.toLowerCase().contains(lowerQuery) ||
+            r.category.toLowerCase().contains(lowerQuery);
+      }).toList();
+    } catch (e) {
+      print('Hatırlatıcılar aranırken hata: $e');
+      return [];
+    }
+  }
+
+  // Get reminders by category
+  Future<List<Reminder>> getRemindersByCategory(String category) async {
+    try {
+      final allReminders = await getAllReminders();
+      return allReminders.where((r) => r.category == category).toList();
+    } catch (e) {
+      print('Kategoriye göre hatırlatıcılar alınırken hata: $e');
+      return [];
+    }
+  }
+
+  // Get reminders by date
+  Future<List<Reminder>> getRemindersByDate(DateTime date) async {
+    try {
+      final allReminders = await getAllReminders();
+      final startOfDay = DateTime(date.year, date.month, date.day);
+      final endOfDay = DateTime(date.year, date.month, date.day, 23, 59, 59);
+
+      return allReminders.where((r) {
+        return r.dateTime.isAfter(startOfDay.subtract(const Duration(seconds: 1))) &&
+            r.dateTime.isBefore(endOfDay.add(const Duration(seconds: 1)));
+      }).toList();
+    } catch (e) {
+      print('Tarihe göre hatırlatıcılar alınırken hata: $e');
+      return [];
+    }
+  }
+
+  // Get reminder by ID
+  Future<Reminder?> getReminder(int id) async {
+    try {
+      final allReminders = await getAllReminders();
+      return allReminders.firstWhere(
+        (r) => r.id == id,
+        orElse: () => throw Exception('Hatırlatıcı bulunamadı'),
+      );
     } catch (e) {
       print('Hatırlatıcı bulunamadı: $e');
       return null;
     }
   }
 
+  // Update reminder (using sync service)
   Future<int> updateReminder(Reminder reminder) async {
-    if (_userId == null || reminder.id == null) {
-      return 0;
-    }
-
     try {
-      final data = {
-        'title': reminder.title,
-        'description': reminder.description,
-        'date_time': reminder.dateTime.toIso8601String(),
-        'is_recurring': reminder.isRecurring,
-        'category': reminder.category,
-        'is_completed': reminder.isCompleted,
-        'is_all_day': reminder.isAllDay,
-        'recurrence_type': reminder.recurrenceType.name,
-        'weekly_days': reminder.weeklyDays.isEmpty ? null : reminder.weeklyDays.join(','),
-        'monthly_day': reminder.monthlyDay,
-        'notification_before_minutes': reminder.notificationBeforeMinutes,
-        'priority': reminder.priority.name,
-        'color_tag': reminder.colorTag,
-      };
+      if (_userId == null || reminder.id == null) {
+        return 0;
+      }
 
-      await _supabase
-          .from('reminders')
-          .update(data)
-          .eq('id', reminder.id!)
-          .eq('user_id', _userId!);
-
+      await _syncService.updateReminder(reminder);
       return 1;
     } catch (e) {
       print('Hatırlatıcı güncellenirken hata: $e');
@@ -220,18 +138,14 @@ class DatabaseHelper {
     }
   }
 
+  // Delete reminder (using sync service)
   Future<int> deleteReminder(int id) async {
-    if (_userId == null) {
-      return 0;
-    }
-
     try {
-      await _supabase
-          .from('reminders')
-          .delete()
-          .eq('id', id)
-          .eq('user_id', _userId!);
+      if (_userId == null) {
+        return 0;
+      }
 
+      await _syncService.deleteReminder(id);
       return 1;
     } catch (e) {
       print('Hatırlatıcı silinirken hata: $e');
@@ -239,19 +153,13 @@ class DatabaseHelper {
     }
   }
 
+  // Get all categories
   Future<List<String>> getAllCategories() async {
-    if (_userId == null) {
-      return [];
-    }
-
     try {
-      final response = await _supabase
-          .from('reminders')
-          .select('category')
-          .eq('user_id', _userId!);
-
-      final categories = (response as List)
-          .map((map) => (map as Map<String, dynamic>)['category'] as String)
+      final allReminders = await getAllReminders();
+      final categories = allReminders
+          .map((r) => r.category)
+          .where((c) => c.isNotEmpty)
           .toSet()
           .toList();
       
@@ -263,30 +171,24 @@ class DatabaseHelper {
     }
   }
 
-  // Supabase map'ini Reminder'a çevir
-  Reminder _reminderFromSupabaseMap(Map<String, dynamic> map) {
-    return Reminder(
-      id: map['id'] as int?,
-      title: map['title'] as String,
-      description: map['description'] as String? ?? '',
-      dateTime: DateTime.parse(map['date_time'] as String),
-      isRecurring: map['is_recurring'] as bool? ?? false,
-      category: map['category'] as String? ?? 'Genel',
-      isCompleted: map['is_completed'] as bool? ?? false,
-      isAllDay: map['is_all_day'] as bool? ?? false,
-      recurrenceType: RecurrenceType.values.firstWhere(
-        (e) => e.name == (map['recurrence_type'] as String? ?? 'none'),
-        orElse: () => RecurrenceType.none,
-      ),
-      weeklyDays: (map['weekly_days'] as String? ?? '').split(',').where((e) => e.isNotEmpty).map((e) => int.parse(e)).toList(),
-      monthlyDay: map['monthly_day'] as int?,
-      notificationBeforeMinutes: map['notification_before_minutes'] as int? ?? 0,
-      priority: Priority.values.firstWhere(
-        (e) => e.name == (map['priority'] as String? ?? 'normal'),
-        orElse: () => Priority.normal,
-      ),
-      colorTag: map['color_tag'] as int? ?? 0,
-    );
+  // Force sync with server
+  Future<bool> syncWithServer() async {
+    try {
+      return await _syncService.forceSync();
+    } catch (e) {
+      print('Senkronizasyon hatası: $e');
+      return false;
+    }
   }
-}
 
+  // Check if online
+  Future<bool> isOnline() async {
+    return await _syncService.isOnline();
+  }
+
+  // Get last sync time
+  DateTime? get lastSyncTime => _syncService.lastSyncTime;
+
+  // Check if syncing
+  bool get isSyncing => _syncService.isSyncing;
+}

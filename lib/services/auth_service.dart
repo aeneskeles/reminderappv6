@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/supabase_config.dart';
+import 'sync_service.dart';
 
 class AuthService {
   static final SupabaseClient _supabase = Supabase.instance.client;
@@ -91,6 +92,8 @@ class AuthService {
 
   // Çıkış yap
   Future<void> signOut() async {
+    // Clear local data before signing out
+    await SyncService.instance.clearLocalData();
     await _supabase.auth.signOut();
   }
 

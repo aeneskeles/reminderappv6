@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import '../services/settings_service.dart';
+import '../services/auth_service.dart';
 import '../services/theme_service.dart';
+import 'login_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -10,119 +13,164 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  final ThemeService _themeService = ThemeService.instance;
-  String _selectedColor = 'Purple';
+  final SettingsService _settingsService = SettingsService.instance;
+  final AuthService _authService = AuthService();
+  
+  // Settings values
+  int _defaultSnoozeMinutes = 10;
+  int _defaultNotificationMinutes = 15;
+  bool _notificationSound = true;
+  bool _notificationVibration = true;
+  String _themeMode = 'system';
+  String _language = 'tr';
+  
+  // User profile
+  Map<String, dynamic>? _userProfile;
+  
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadThemeColor();
+    _loadSettings();
+    _loadUserProfile();
   }
 
-  Future<void> _loadThemeColor() async {
-    final color = await _themeService.getThemeColor();
-    final colorName = ThemeService.themeColors.entries
-        .firstWhere((entry) => entry.value == color, orElse: () => ThemeService.themeColors.entries.first)
-        .key;
-    
+  Future<void> _loadSettings() async {
+    final settings = await _settingsService.getAllSettings();
     setState(() {
-      _selectedColor = colorName;
+      _defaultSnoozeMinutes = settings['defaultSnoozeMinutes'];
+      _defaultNotificationMinutes = settings['defaultNotificationMinutes'];
+      _notificationSound = settings['notificationSound'];
+      _notificationVibration = settings['notificationVibration'];
+      _themeMode = settings['themeMode'];
+      _language = settings['language'];
       _isLoading = false;
     });
   }
 
-  Future<void> _changeThemeColor(String colorName) async {
-    await _themeService.setThemeColor(colorName);
+  Future<void> _loadUserProfile() async {
+    final profile = await _authService.getUserProfile();
     setState(() {
-      _selectedColor = colorName;
+      _userProfile = profile;
     });
+  }
+
+  Future<void> _logout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Çıkış Yap'),
+        content: const Text('Çıkış yapmak istediğinize emin misiniz?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('İptal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Çıkış Yap'),
+          ),
+        ],
+      ),
+    );
     
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Tema rengi "$colorName" olarak değiştirildi. Uygulamayı yeniden başlatın.'),
-          backgroundColor: ThemeService.themeColors[colorName],
-          duration: const Duration(seconds: 2),
-        ),
-      );
+    if (confirm == true) {
+      await _authService.signOut();
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+          (route) => false,
+        );
+      }
     }
+  }
+
+  Widget _buildGlassContainer({required Widget child}) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withOpacity(0.9),
+            Colors.white.withOpacity(0.7),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.2),
+                width: 1.5,
+              ),
+            ),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: Colors.white.withOpacity(0.9),
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return Scaffold(
-        body: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: ThemeService.instance.getGradientColors(
-                ThemeService.themeColors[_selectedColor]!,
-              ),
-            ),
-          ),
-          child: const Center(
-            child: CircularProgressIndicator(color: Colors.white),
-          ),
-        ),
-      );
-    }
+    return FutureBuilder<Color>(
+      future: ThemeService.instance.getThemeColor(),
+      builder: (context, snapshot) {
+        final themeColor = snapshot.data ?? ThemeService.instance.defaultColor;
+        final gradientColors = ThemeService.instance.getGradientColors(themeColor);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: ThemeService.instance.getGradientColors(
-              ThemeService.themeColors[_selectedColor]!,
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: gradientColors,
+              ),
             ),
-          ),
-        ),
-        child: SafeArea(
-          child: Stack(
-            children: [
-              // Blurred background shapes
-              Positioned(
-                top: -100,
-                left: -100,
-                child: Container(
-                  width: 300,
-                  height: 300,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withOpacity(0.1),
-                  ),
-                ),
-              ),
-              Positioned(
-                bottom: -150,
-                right: -100,
-                child: Container(
-                  width: 400,
-                  height: 400,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white.withOpacity(0.1),
-                  ),
-                ),
-              ),
-              // Main content
-              Column(
+            child: SafeArea(
+              child: Column(
                 children: [
                   // Header
                   Padding(
-                    padding: const EdgeInsets.all(20.0),
+                    padding: const EdgeInsets.all(20),
                     child: Row(
                       children: [
                         IconButton(
                           icon: const Icon(Icons.arrow_back, color: Colors.white),
                           onPressed: () => Navigator.pop(context),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 12),
                         const Text(
                           'Ayarlar',
                           style: TextStyle(
@@ -134,150 +182,411 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  // Settings card
+                  // Settings List
                   Expanded(
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(24.0),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.3),
-                              width: 1.5,
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                    child: _isLoading
+                        ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                        : ListView(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
                             children: [
-                              const Text(
-                                'Tema Rengi',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Uygulamanın ana rengini seçin',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.white.withOpacity(0.7),
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-                              // Color selection grid
-                              Expanded(
-                                child: GridView.builder(
-                                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 4,
-                                    crossAxisSpacing: 16,
-                                    mainAxisSpacing: 16,
-                                    childAspectRatio: 1,
-                                  ),
-                                  itemCount: ThemeService.themeColors.length,
-                                  itemBuilder: (context, index) {
-                                    final colorEntry = ThemeService.themeColors.entries.elementAt(index);
-                                    final colorName = colorEntry.key;
-                                    final color = colorEntry.value;
-                                    final isSelected = _selectedColor == colorName;
-
-                                    return GestureDetector(
-                                      onTap: () => _changeThemeColor(colorName),
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: color,
-                                          border: Border.all(
-                                            color: isSelected ? Colors.white : Colors.transparent,
-                                            width: 4,
-                                          ),
-                                          boxShadow: isSelected
-                                              ? [
-                                                  BoxShadow(
-                                                    color: color.withOpacity(0.5),
-                                                    blurRadius: 20,
-                                                    spreadRadius: 5,
-                                                  ),
-                                                ]
-                                              : null,
-                                        ),
-                                        child: isSelected
-                                            ? const Icon(
-                                                Icons.check,
-                                                color: Colors.white,
-                                                size: 30,
-                                              )
-                                            : null,
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              // Selected color info
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                child: Row(
+                              // Account Section
+                              _buildSectionTitle('HESAP'),
+                              _buildGlassContainer(
+                                child: Column(
                                   children: [
-                                    Container(
-                                      width: 40,
-                                      height: 40,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: ThemeService.themeColors[_selectedColor],
+                                    ListTile(
+                                      leading: CircleAvatar(
+                                        backgroundColor: themeColor.withOpacity(0.2),
+                                        child: Icon(Icons.person, color: themeColor),
+                                      ),
+                                      title: Text(
+                                        _userProfile != null
+                                            ? '${_userProfile!['first_name'] ?? ''} ${_userProfile!['last_name'] ?? ''}'
+                                            : 'Kullanıcı',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                      subtitle: Text(
+                                        _userProfile?['email'] ?? _authService.currentUser?.email ?? '',
+                                        style: TextStyle(color: Colors.grey[600]),
                                       ),
                                     ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Seçili Tema',
-                                            style: TextStyle(
-                                              color: Colors.white.withOpacity(0.7),
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            _selectedColor,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
+                                    const Divider(height: 1),
+                                    ListTile(
+                                      leading: const Icon(Icons.logout, color: Colors.red),
+                                      title: const Text(
+                                        'Çıkış Yap',
+                                        style: TextStyle(color: Colors.red),
+                                      ),
+                                      onTap: _logout,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              
+                              // Notification Settings
+                              _buildSectionTitle('BİLDİRİM AYARLARI'),
+                              _buildGlassContainer(
+                                child: Column(
+                                  children: [
+                                    ListTile(
+                                      leading: const Icon(Icons.snooze, color: Colors.blue),
+                                      title: const Text(
+                                        'Varsayılan Erteleme Süresi',
+                                        style: TextStyle(color: Colors.black87),
+                                      ),
+                                      subtitle: Text(
+                                        '$_defaultSnoozeMinutes dakika',
+                                        style: TextStyle(color: Colors.grey[600]),
+                                      ),
+                                      onTap: () => _showSnoozeDialog(),
+                                    ),
+                                    const Divider(height: 1),
+                                    ListTile(
+                                      leading: const Icon(Icons.notifications_active, color: Colors.orange),
+                                      title: const Text(
+                                        'Varsayılan Önceden Hatırlatma',
+                                        style: TextStyle(color: Colors.black87),
+                                      ),
+                                      subtitle: Text(
+                                        '$_defaultNotificationMinutes dakika önce',
+                                        style: TextStyle(color: Colors.grey[600]),
+                                      ),
+                                      onTap: () => _showNotificationTimeDialog(),
+                                    ),
+                                    const Divider(height: 1),
+                                    SwitchListTile(
+                                      secondary: const Icon(Icons.volume_up, color: Colors.purple),
+                                      title: const Text(
+                                        'Bildirim Sesi',
+                                        style: TextStyle(color: Colors.black87),
+                                      ),
+                                      value: _notificationSound,
+                                      onChanged: (value) async {
+                                        await _settingsService.setNotificationSound(value);
+                                        setState(() {
+                                          _notificationSound = value;
+                                        });
+                                      },
+                                    ),
+                                    const Divider(height: 1),
+                                    SwitchListTile(
+                                      secondary: const Icon(Icons.vibration, color: Colors.teal),
+                                      title: const Text(
+                                        'Titreşim',
+                                        style: TextStyle(color: Colors.black87),
+                                      ),
+                                      value: _notificationVibration,
+                                      onChanged: (value) async {
+                                        await _settingsService.setNotificationVibration(value);
+                                        setState(() {
+                                          _notificationVibration = value;
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              
+                              // Appearance Settings
+                              _buildSectionTitle('GÖRÜNÜM AYARLARI'),
+                              _buildGlassContainer(
+                                child: Column(
+                                  children: [
+                                    ListTile(
+                                      leading: const Icon(Icons.palette, color: Colors.indigo),
+                                      title: const Text(
+                                        'Tema',
+                                        style: TextStyle(color: Colors.black87),
+                                      ),
+                                      subtitle: Text(
+                                        _getThemeModeText(_themeMode),
+                                        style: TextStyle(color: Colors.grey[600]),
+                                      ),
+                                      onTap: () => _showThemeDialog(),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              
+                              // Language Settings
+                              _buildSectionTitle('DİL AYARLARI'),
+                              _buildGlassContainer(
+                                child: ListTile(
+                                  leading: const Icon(Icons.language, color: Colors.deepOrange),
+                                  title: const Text(
+                                    'Dil',
+                                    style: TextStyle(color: Colors.black87),
+                                  ),
+                                  subtitle: Text(
+                                    _getLanguageText(_language),
+                                    style: TextStyle(color: Colors.grey[600]),
+                                  ),
+                                  onTap: () => _showLanguageDialog(),
+                                ),
+                              ),
+                              
+                              // App Info
+                              _buildSectionTitle('UYGULAMA BİLGİSİ'),
+                              _buildGlassContainer(
+                                child: Column(
+                                  children: [
+                                    ListTile(
+                                      leading: const Icon(Icons.info_outline, color: Colors.grey),
+                                      title: const Text(
+                                        'Versiyon',
+                                        style: TextStyle(color: Colors.black87),
+                                      ),
+                                      subtitle: Text(
+                                        '1.0.0',
+                                        style: TextStyle(color: Colors.grey[600]),
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
+                              
+                              const SizedBox(height: 20),
                             ],
                           ),
-                        ),
-                      ),
-                    ),
                   ),
                 ],
               ),
-            ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showSnoozeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Erteleme Süresi'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [5, 10, 15, 30].map((minutes) {
+            return RadioListTile<int>(
+              title: Text('$minutes dakika'),
+              value: minutes,
+              groupValue: _defaultSnoozeMinutes,
+              onChanged: (value) async {
+                if (value != null) {
+                  await _settingsService.setDefaultSnoozeMinutes(value);
+                  setState(() {
+                    _defaultSnoozeMinutes = value;
+                  });
+                  Navigator.pop(context);
+                }
+              },
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  void _showNotificationTimeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Önceden Hatırlatma'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [0, 5, 10, 15, 30, 60, 120, 1440].map((minutes) {
+              String label;
+              if (minutes == 0) {
+                label = 'Hatırlatma yok';
+              } else if (minutes < 60) {
+                label = '$minutes dakika önce';
+              } else if (minutes == 60) {
+                label = '1 saat önce';
+              } else if (minutes < 1440) {
+                label = '${minutes ~/ 60} saat önce';
+              } else {
+                label = '1 gün önce';
+              }
+              
+              return RadioListTile<int>(
+                title: Text(label),
+                value: minutes,
+                groupValue: _defaultNotificationMinutes,
+                onChanged: (value) async {
+                  if (value != null) {
+                    await _settingsService.setDefaultNotificationMinutes(value);
+                    setState(() {
+                      _defaultNotificationMinutes = value;
+                    });
+                    Navigator.pop(context);
+                  }
+                },
+              );
+            }).toList(),
           ),
         ),
       ),
     );
   }
-}
 
+  void _showThemeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Tema Seçin'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<String>(
+              title: const Text('Açık Tema'),
+              value: 'light',
+              groupValue: _themeMode,
+              onChanged: (value) async {
+                if (value != null) {
+                  await _settingsService.setThemeMode(value);
+                  setState(() {
+                    _themeMode = value;
+                  });
+                  Navigator.pop(context);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Tema değişikliği uygulandı'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                }
+              },
+            ),
+            RadioListTile<String>(
+              title: const Text('Koyu Tema'),
+              value: 'dark',
+              groupValue: _themeMode,
+              onChanged: (value) async {
+                if (value != null) {
+                  await _settingsService.setThemeMode(value);
+                  setState(() {
+                    _themeMode = value;
+                  });
+                  Navigator.pop(context);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Tema değişikliği uygulandı'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                }
+              },
+            ),
+            RadioListTile<String>(
+              title: const Text('Sistem Teması'),
+              value: 'system',
+              groupValue: _themeMode,
+              onChanged: (value) async {
+                if (value != null) {
+                  await _settingsService.setThemeMode(value);
+                  setState(() {
+                    _themeMode = value;
+                  });
+                  Navigator.pop(context);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Tema değişikliği uygulandı'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLanguageDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Dil Seçin'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<String>(
+              title: const Text('Türkçe'),
+              value: 'tr',
+              groupValue: _language,
+              onChanged: (value) async {
+                if (value != null) {
+                  await _settingsService.setLanguage(value);
+                  setState(() {
+                    _language = value;
+                  });
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Dil değişikliği için uygulamayı yeniden başlatın'),
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                }
+              },
+            ),
+            RadioListTile<String>(
+              title: const Text('English'),
+              value: 'en',
+              groupValue: _language,
+              onChanged: (value) async {
+                if (value != null) {
+                  await _settingsService.setLanguage(value);
+                  setState(() {
+                    _language = value;
+                  });
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Restart the app to apply language change'),
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _getThemeModeText(String mode) {
+    switch (mode) {
+      case 'light':
+        return 'Açık Tema';
+      case 'dark':
+        return 'Koyu Tema';
+      case 'system':
+        return 'Sistem Teması';
+      default:
+        return 'Sistem Teması';
+    }
+  }
+
+  String _getLanguageText(String lang) {
+    switch (lang) {
+      case 'tr':
+        return 'Türkçe';
+      case 'en':
+        return 'English';
+      default:
+        return 'Türkçe';
+    }
+  }
+}

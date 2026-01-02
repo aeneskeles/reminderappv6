@@ -116,6 +116,50 @@ class _AddEditReminderScreenState extends State<AddEditReminderScreen> {
   }
 
   Future<void> _saveReminder() async {
+    // Validate title
+    if (_titleController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Başlık boş bırakılamaz'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    // Validate date (check if it's in the past)
+    final now = DateTime.now();
+    if (_selectedDateTime.isBefore(now) && !_isRecurring) {
+      final shouldContinue = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('⚠️ Geçmiş Tarih'),
+          content: const Text(
+            'Seçtiğiniz tarih geçmişte. Tarihi şimdiye güncellemek ister misiniz?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('İptal'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Şimdiye Güncelle'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldContinue == true) {
+        setState(() {
+          _selectedDateTime = now.add(const Duration(minutes: 5));
+        });
+      } else {
+        return;
+      }
+    }
+
     if (_formKey.currentState!.validate()) {
       try {
         // Recurrence type'ı isRecurring'e göre ayarla
@@ -151,8 +195,9 @@ class _AddEditReminderScreenState extends State<AddEditReminderScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(widget.reminder == null 
-                ? 'Hatırlatıcı oluşturuldu' 
-                : 'Hatırlatıcı güncellendi'),
+                ? '✅ Hatırlatıcı oluşturuldu' 
+                : '✅ Hatırlatıcı güncellendi'),
+              backgroundColor: Colors.green,
             ),
           );
           Navigator.pop(context, true);
@@ -161,7 +206,10 @@ class _AddEditReminderScreenState extends State<AddEditReminderScreen> {
         print('Hatırlatıcı kaydedilirken hata: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Hata: $e')),
+            SnackBar(
+              content: Text('❌ Hata: $e'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       }
@@ -237,6 +285,15 @@ class _AddEditReminderScreenState extends State<AddEditReminderScreen> {
                                 style: const TextStyle(color: Colors.white),
                                 keyboardType: TextInputType.text,
                                 textCapitalization: TextCapitalization.sentences,
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) {
+                                    return 'Başlık boş bırakılamaz';
+                                  }
+                                  if (value.trim().length < 3) {
+                                    return 'Başlık en az 3 karakter olmalıdır';
+                                  }
+                                  return null;
+                                },
                                 decoration: InputDecoration(
                                   labelText: 'Başlık *',
                                   labelStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
@@ -250,12 +307,6 @@ class _AddEditReminderScreenState extends State<AddEditReminderScreen> {
                                   fillColor: Colors.white.withOpacity(0.2),
                                   prefixIcon: Icon(Icons.title, color: Colors.white.withOpacity(0.7)),
                                 ),
-                                validator: (value) {
-                                  if (value == null || value.trim().isEmpty) {
-                                    return 'Başlık gereklidir';
-                                  }
-                                  return null;
-                                },
                               ),
                             ),
                             const SizedBox(height: 16),
