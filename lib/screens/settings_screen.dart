@@ -4,6 +4,10 @@ import '../services/settings_service.dart';
 import '../services/auth_service.dart';
 import '../services/theme_service.dart';
 import 'login_screen.dart';
+import 'statistics_screen.dart';
+import 'notification_history_screen.dart';
+import 'app_lock_settings_screen.dart';
+import 'accessibility_settings_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -325,6 +329,98 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     style: TextStyle(color: Colors.grey[600]),
                                   ),
                                   onTap: () => _showLanguageDialog(),
+                                ),
+                              ),
+                              
+                              // Advanced Features
+                              _buildSectionTitle('GELİŞMİŞ ÖZELLİKLER'),
+                              _buildGlassContainer(
+                                child: Column(
+                                  children: [
+                                    ListTile(
+                                      leading: const Icon(Icons.bar_chart, color: Colors.green),
+                                      title: const Text(
+                                        'İstatistikler',
+                                        style: TextStyle(color: Colors.black87),
+                                      ),
+                                      subtitle: Text(
+                                        'Hatırlatıcı istatistiklerini görüntüle',
+                                        style: TextStyle(color: Colors.grey[600]),
+                                      ),
+                                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => const StatisticsScreen(),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                    const Divider(height: 1),
+                                    ListTile(
+                                      leading: const Icon(Icons.history, color: Colors.amber),
+                                      title: const Text(
+                                        'Bildirim Geçmişi',
+                                        style: TextStyle(color: Colors.black87),
+                                      ),
+                                      subtitle: Text(
+                                        'Geçmiş bildirimleri görüntüle',
+                                        style: TextStyle(color: Colors.grey[600]),
+                                      ),
+                                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => const NotificationHistoryScreen(),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                    const Divider(height: 1),
+                                    ListTile(
+                                      leading: const Icon(Icons.lock, color: Colors.red),
+                                      title: const Text(
+                                        'Uygulama Kilidi',
+                                        style: TextStyle(color: Colors.black87),
+                                      ),
+                                      subtitle: Text(
+                                        'PIN veya biyometrik kilit',
+                                        style: TextStyle(color: Colors.grey[600]),
+                                      ),
+                                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => const AppLockSettingsScreen(),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                    const Divider(height: 1),
+                                    ListTile(
+                                      leading: const Icon(Icons.accessibility, color: Colors.purple),
+                                      title: const Text(
+                                        'Erişilebilirlik',
+                                        style: TextStyle(color: Colors.black87),
+                                      ),
+                                      subtitle: Text(
+                                        'Yazı boyutu, kontrast ve daha fazlası',
+                                        style: TextStyle(color: Colors.grey[600]),
+                                      ),
+                                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => const AccessibilitySettingsScreen(),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
                                 ),
                               ),
                               

@@ -191,4 +191,57 @@ class DatabaseHelper {
 
   // Check if syncing
   bool get isSyncing => _syncService.isSyncing;
+
+  // Get reminders (alias for getAllReminders)
+  Future<List<Reminder>> getReminders() async {
+    return await getAllReminders();
+  }
+
+  // Get favorite reminders
+  Future<List<Reminder>> getFavoriteReminders() async {
+    try {
+      final allReminders = await getAllReminders();
+      return allReminders.where((r) => r.isFavorite).toList();
+    } catch (e) {
+      print('Favori hatırlatıcılar alınırken hata: $e');
+      return [];
+    }
+  }
+
+  // Get shared reminders
+  Future<List<Reminder>> getSharedReminders() async {
+    try {
+      final allReminders = await getAllReminders();
+      return allReminders.where((r) => r.isShared).toList();
+    } catch (e) {
+      print('Paylaşılan hatırlatıcılar alınırken hata: $e');
+      return [];
+    }
+  }
+
+  // Toggle favorite
+  Future<bool> toggleFavorite(int id) async {
+    try {
+      final reminder = await getReminder(id);
+      if (reminder == null) return false;
+
+      final updated = reminder.copyWith(isFavorite: !reminder.isFavorite);
+      await updateReminder(updated);
+      return true;
+    } catch (e) {
+      print('Favori durumu değiştirilirken hata: $e');
+      return false;
+    }
+  }
+
+  // Get reminders with attachments
+  Future<List<Reminder>> getRemindersWithAttachments() async {
+    try {
+      final allReminders = await getAllReminders();
+      return allReminders.where((r) => r.attachments.isNotEmpty).toList();
+    } catch (e) {
+      print('Ekli hatırlatıcılar alınırken hata: $e');
+      return [];
+    }
+  }
 }

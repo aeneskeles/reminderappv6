@@ -20,8 +20,9 @@ class LocalDatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: _upgradeDB,
     );
   }
 
@@ -44,6 +45,11 @@ class LocalDatabaseHelper {
         notification_before_minutes INTEGER,
         priority TEXT,
         color_tag INTEGER,
+        is_favorite INTEGER NOT NULL DEFAULT 0,
+        attachments TEXT,
+        shared_with TEXT,
+        is_shared INTEGER NOT NULL DEFAULT 0,
+        created_by TEXT,
         is_synced INTEGER NOT NULL DEFAULT 0,
         needs_sync INTEGER NOT NULL DEFAULT 1,
         is_deleted INTEGER NOT NULL DEFAULT 0,
@@ -57,6 +63,19 @@ class LocalDatabaseHelper {
     await db.execute('CREATE INDEX idx_server_id ON reminders(server_id)');
     await db.execute('CREATE INDEX idx_is_synced ON reminders(is_synced)');
     await db.execute('CREATE INDEX idx_needs_sync ON reminders(needs_sync)');
+    await db.execute('CREATE INDEX idx_is_favorite ON reminders(is_favorite)');
+  }
+
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Version 2'ye yükseltme: Yeni alanları ekle
+      await db.execute('ALTER TABLE reminders ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0');
+      await db.execute('ALTER TABLE reminders ADD COLUMN attachments TEXT');
+      await db.execute('ALTER TABLE reminders ADD COLUMN shared_with TEXT');
+      await db.execute('ALTER TABLE reminders ADD COLUMN is_shared INTEGER NOT NULL DEFAULT 0');
+      await db.execute('ALTER TABLE reminders ADD COLUMN created_by TEXT');
+      await db.execute('CREATE INDEX idx_is_favorite ON reminders(is_favorite)');
+    }
   }
 
   // Create reminder locally
@@ -78,11 +97,16 @@ class LocalDatabaseHelper {
       'notification_before_minutes': reminder.notificationBeforeMinutes,
       'priority': reminder.priority.name,
       'color_tag': reminder.colorTag,
+      'is_favorite': reminder.isFavorite ? 1 : 0,
+      'attachments': reminder.attachments.isEmpty ? null : reminder.attachments.join('|'),
+      'shared_with': reminder.sharedWith,
+      'is_shared': reminder.isShared ? 1 : 0,
+      'created_by': reminder.createdBy ?? userId,
       'is_synced': 0,
       'needs_sync': 1,
       'is_deleted': 0,
-      'created_at': DateTime.now().toIso8601String(),
-      'updated_at': DateTime.now().toIso8601String(),
+      'created_at': reminder.createdAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
+      'updated_at': reminder.updatedAt?.toIso8601String() ?? DateTime.now().toIso8601String(),
     };
 
     return await db.insert('reminders', data);
@@ -146,6 +170,10 @@ class LocalDatabaseHelper {
       'notification_before_minutes': reminder.notificationBeforeMinutes,
       'priority': reminder.priority.name,
       'color_tag': reminder.colorTag,
+      'is_favorite': reminder.isFavorite ? 1 : 0,
+      'attachments': reminder.attachments.isEmpty ? null : reminder.attachments.join('|'),
+      'shared_with': reminder.sharedWith,
+      'is_shared': reminder.isShared ? 1 : 0,
       'needs_sync': 1,
       'updated_at': DateTime.now().toIso8601String(),
     };
@@ -301,6 +329,20 @@ class LocalDatabaseHelper {
         orElse: () => Priority.normal,
       ),
       colorTag: map['color_tag'] as int? ?? 0,
+      isFavorite: (map['is_favorite'] as int? ?? 0) == 1,
+      attachments: (map['attachments'] as String? ?? '')
+          .split('|')
+          .where((e) => e.isNotEmpty)
+          .toList(),
+      sharedWith: map['shared_with'] as String?,
+      isShared: (map['is_shared'] as int? ?? 0) == 1,
+      createdBy: map['created_by'] as String?,
+      createdAt: map['created_at'] != null 
+          ? DateTime.parse(map['created_at'] as String) 
+          : null,
+      updatedAt: map['updated_at'] != null 
+          ? DateTime.parse(map['updated_at'] as String) 
+          : null,
     );
   }
 }

@@ -12,6 +12,7 @@ import 'login_screen.dart';
 import 'settings_screen.dart';
 import 'reminder_detail_screen.dart';
 import 'calendar_screen.dart';
+import 'statistics_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -795,6 +796,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                       ),
                                     );
                                   },
+                                  tooltip: 'Takvim',
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.bar_chart, color: Colors.white),
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => const StatisticsScreen(),
+                                      ),
+                                    );
+                                  },
+                                  tooltip: 'İstatistikler',
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.settings, color: Colors.white),

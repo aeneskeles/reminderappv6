@@ -45,5 +45,18 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Yeni özellikler için izinler -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Sesli hatırlatıcı eklemek için mikrofon erişimi gerekli</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Sesli komutları tanımak için konuşma tanıma erişimi gerekli</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Hatırlatıcılara fotoğraf eklemek için kamera erişimi gerekli</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Hatırlatıcılara fotoğraf eklemek için galeri erişimi gerekli</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Fotoğrafları kaydetmek için galeri erişimi gerekli</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Uygulamayı güvenli bir şekilde açmak için Face ID kullanılacak</string>
 </dict>
 </plist>

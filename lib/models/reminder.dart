@@ -16,6 +16,13 @@ class Reminder {
   final int notificationBeforeMinutes; // Bildirim kaç dakika önce
   final Priority priority;
   final int colorTag; // Renk etiketi (0-7)
+  final bool isFavorite; // Favori hatırlatıcı
+  final List<String> attachments; // Dosya/görsel yolları
+  final String? sharedWith; // Paylaşılan kullanıcı ID'leri (virgülle ayrılmış)
+  final bool isShared; // Paylaşılan hatırlatıcı mı
+  final String? createdBy; // Oluşturan kullanıcı ID
+  final DateTime? createdAt; // Oluşturulma zamanı
+  final DateTime? updatedAt; // Güncellenme zamanı
 
   Reminder({
     this.id,
@@ -32,6 +39,13 @@ class Reminder {
     this.notificationBeforeMinutes = 0,
     this.priority = Priority.normal,
     this.colorTag = 0,
+    this.isFavorite = false,
+    this.attachments = const [],
+    this.sharedWith,
+    this.isShared = false,
+    this.createdBy,
+    this.createdAt,
+    this.updatedAt,
   });
 
   Map<String, dynamic> toMap() {
@@ -50,6 +64,13 @@ class Reminder {
       'notificationBeforeMinutes': notificationBeforeMinutes,
       'priority': priority.name,
       'colorTag': colorTag,
+      'isFavorite': isFavorite ? 1 : 0,
+      'attachments': attachments.join('|'),
+      'sharedWith': sharedWith,
+      'isShared': isShared ? 1 : 0,
+      'createdBy': createdBy,
+      'createdAt': createdAt?.toIso8601String(),
+      'updatedAt': updatedAt?.toIso8601String(),
     };
   }
 
@@ -75,6 +96,13 @@ class Reminder {
         orElse: () => Priority.normal,
       ),
       colorTag: map['colorTag'] as int? ?? 0,
+      isFavorite: (map['isFavorite'] as int? ?? 0) == 1,
+      attachments: (map['attachments'] as String? ?? '').split('|').where((e) => e.isNotEmpty).toList(),
+      sharedWith: map['sharedWith'] as String?,
+      isShared: (map['isShared'] as int? ?? 0) == 1,
+      createdBy: map['createdBy'] as String?,
+      createdAt: map['createdAt'] != null ? DateTime.parse(map['createdAt'] as String) : null,
+      updatedAt: map['updatedAt'] != null ? DateTime.parse(map['updatedAt'] as String) : null,
     );
   }
 
@@ -93,6 +121,13 @@ class Reminder {
     int? notificationBeforeMinutes,
     Priority? priority,
     int? colorTag,
+    bool? isFavorite,
+    List<String>? attachments,
+    String? sharedWith,
+    bool? isShared,
+    String? createdBy,
+    DateTime? createdAt,
+    DateTime? updatedAt,
   }) {
     return Reminder(
       id: id ?? this.id,
@@ -109,6 +144,13 @@ class Reminder {
       notificationBeforeMinutes: notificationBeforeMinutes ?? this.notificationBeforeMinutes,
       priority: priority ?? this.priority,
       colorTag: colorTag ?? this.colorTag,
+      isFavorite: isFavorite ?? this.isFavorite,
+      attachments: attachments ?? this.attachments,
+      sharedWith: sharedWith ?? this.sharedWith,
+      isShared: isShared ?? this.isShared,
+      createdBy: createdBy ?? this.createdBy,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 }
