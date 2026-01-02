@@ -8,6 +8,7 @@ import 'statistics_screen.dart';
 import 'notification_history_screen.dart';
 import 'app_lock_settings_screen.dart';
 import 'accessibility_settings_screen.dart';
+import 'achievements_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -338,13 +339,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 child: Column(
                                   children: [
                                     ListTile(
-                                      leading: const Icon(Icons.bar_chart, color: Colors.green),
+                                      leading: const Icon(Icons.emoji_events, color: Colors.amber),
                                       title: const Text(
-                                        'İstatistikler',
+                                        'Rozetler ve Puanlar',
                                         style: TextStyle(color: Colors.black87),
                                       ),
                                       subtitle: Text(
-                                        'Hatırlatıcı istatistiklerini görüntüle',
+                                        'Kazandığın rozetleri ve puanları gör',
                                         style: TextStyle(color: Colors.grey[600]),
                                       ),
                                       trailing: const Icon(Icons.arrow_forward_ios, size: 16),
@@ -352,7 +353,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (context) => const StatisticsScreen(),
+                                            builder: (context) => const AchievementsScreen(),
                                           ),
                                         );
                                       },

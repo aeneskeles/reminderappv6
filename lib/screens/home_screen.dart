@@ -6,6 +6,7 @@ import '../services/database_helper.dart';
 import '../services/notification_service.dart';
 import '../services/auth_service.dart';
 import '../services/theme_service.dart';
+import '../services/gamification_service.dart';
 import '../utils/turkish_char_utils.dart';
 import 'add_edit_reminder_screen.dart';
 import 'login_screen.dart';
@@ -13,6 +14,7 @@ import 'settings_screen.dart';
 import 'reminder_detail_screen.dart';
 import 'calendar_screen.dart';
 import 'statistics_screen.dart';
+import 'achievements_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -25,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
   final NotificationService _notificationService = NotificationService.instance;
   final AuthService _authService = AuthService();
+  final GamificationService _gamificationService = GamificationService();
   List<Reminder> _reminders = [];
   List<Reminder> _filteredReminders = [];
   String _searchQuery = '';
@@ -228,8 +231,45 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     try {
       final updated = reminder.copyWith(isCompleted: !reminder.isCompleted);
       await _dbHelper.updateReminder(updated);
+      
       if (updated.isCompleted) {
         await _notificationService.cancelNotification(updated.id!);
+        
+        // Gamification - Puan ve rozet kontrolü
+        final result = await _gamificationService.onReminderCompleted(updated);
+        final pointsEarned = result['points_earned'] as int;
+        final wasOnTime = result['was_on_time'] as bool;
+        final unlockedAchievements = result['unlocked_achievements'] as List;
+        
+        // Puan kazanıldıysa göster
+        if (pointsEarned > 0 && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.star, color: Colors.amber),
+                  const SizedBox(width: 8),
+                  Text(
+                    wasOnTime 
+                        ? '🎉 +$pointsEarned puan! Zamanında tamamladın!'
+                        : '✅ +$pointsEarned puan kazandın!',
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        
+        // Yeni rozet kazanıldıysa göster
+        if (unlockedAchievements.isNotEmpty && mounted) {
+          Future.delayed(const Duration(milliseconds: 500), () {
+            for (final achievement in unlockedAchievements) {
+              _showAchievementDialog(achievement);
+            }
+          });
+        }
       } else {
         await _notificationService.scheduleNotification(updated);
       }
@@ -739,66 +779,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               ],
                             ),
                             Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                // Sync status indicator
-                                FutureBuilder<bool>(
-                                  future: _dbHelper.isOnline(),
-                                  builder: (context, snapshot) {
-                                    final isOnline = snapshot.data ?? false;
-                                    return IconButton(
-                                      icon: Icon(
-                                        isOnline ? Icons.cloud_done : Icons.cloud_off,
-                                        color: Colors.white,
-                                        size: 20,
-                                      ),
-                                      onPressed: () async {
-                                        if (isOnline) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(
-                                              content: Text('Senkronizasyon başlatılıyor...'),
-                                              duration: Duration(seconds: 1),
-                                            ),
-                                          );
-                                          final success = await _dbHelper.syncWithServer();
-                                          if (mounted) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text(
-                                                  success 
-                                                      ? '✅ Senkronizasyon tamamlandı' 
-                                                      : '❌ Senkronizasyon başarısız',
-                                                ),
-                                                duration: const Duration(seconds: 2),
-                                              ),
-                                            );
-                                            await _loadReminders();
-                                          }
-                                        } else {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(
-                                              content: Text('📴 Offline moddasınız'),
-                                              duration: Duration(seconds: 2),
-                                            ),
-                                          );
-                                        }
-                                      },
-                                      tooltip: isOnline ? 'Online - Senkronize et' : 'Offline',
-                                    );
-                                  },
-                                ),
+                                // Rozetler
                                 IconButton(
-                                  icon: const Icon(Icons.calendar_today, color: Colors.white),
+                                  padding: const EdgeInsets.all(8),
+                                  constraints: const BoxConstraints(),
+                                  iconSize: 22,
+                                  icon: const Icon(Icons.emoji_events, color: Colors.white),
                                   onPressed: () {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (context) => const CalendarScreen(),
+                                        builder: (context) => const AchievementsScreen(),
                                       ),
                                     );
                                   },
-                                  tooltip: 'Takvim',
+                                  tooltip: 'Rozetler',
                                 ),
+                                // İstatistikler
                                 IconButton(
+                                  padding: const EdgeInsets.all(8),
+                                  constraints: const BoxConstraints(),
+                                  iconSize: 22,
                                   icon: const Icon(Icons.bar_chart, color: Colors.white),
                                   onPressed: () {
                                     Navigator.push(
@@ -810,7 +813,27 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                   },
                                   tooltip: 'İstatistikler',
                                 ),
+                                // Takvim
                                 IconButton(
+                                  padding: const EdgeInsets.all(8),
+                                  constraints: const BoxConstraints(),
+                                  iconSize: 22,
+                                  icon: const Icon(Icons.calendar_today, color: Colors.white),
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => const CalendarScreen(),
+                                      ),
+                                    );
+                                  },
+                                  tooltip: 'Takvim',
+                                ),
+                                // Ayarlar
+                                IconButton(
+                                  padding: const EdgeInsets.all(8),
+                                  constraints: const BoxConstraints(),
+                                  iconSize: 22,
                                   icon: const Icon(Icons.settings, color: Colors.white),
                                   onPressed: () {
                                     Navigator.push(
@@ -821,11 +844,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                     );
                                   },
                                   tooltip: 'Ayarlar',
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.logout, color: Colors.white),
-                                  onPressed: _logout,
-                                  tooltip: 'Çıkış Yap',
                                 ),
                               ],
                             ),
@@ -1078,6 +1096,104 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
         );
       },
+    );
+  }
+
+  void _showAchievementDialog(dynamic achievement) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.amber.shade400,
+                Colors.orange.shade400,
+              ],
+            ),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  achievement.emoji ?? '🏆',
+                  style: const TextStyle(fontSize: 60),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Yeni Rozet Kazandın!',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                achievement.title ?? 'Rozet',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                achievement.description ?? '',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.white.withOpacity(0.9),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '+${achievement.points ?? 0} Puan',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.orange,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                child: const Text(
+                  'Harika!',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
